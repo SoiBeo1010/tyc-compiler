@@ -312,14 +312,15 @@ void circular() {
     // (A following `b = a` would be the same class of problem; it is not reported in the same run after the error above.)
 }
 
-// Error: both autos unknown — `<` is a BinaryOp; types are required before comparison rules apply
+// Error: both autos unknown — an `int` receiver does not disambiguate operand typings here:
+// relational operators yield `int` for any valid numeric operand pair, so the outer type adds little (Rule 2.2.1).
 void compare_autos() {
     auto x;
     auto y;
     int result = x < y;  // TypeCannotBeInferred(BinaryOp(Identifier(x), <, Identifier(y)))
 }
 
-// Error: declaring `int c` does not supply types for `a` and `b`
+// Error: declared type of `c` checks the initializer as a whole; it does not infer `a` / `b` inside `a * b` (Rule 2.2.1).
 void mixed_decl() {
     auto a;
     auto b;
@@ -371,10 +372,11 @@ void valid3() {
     y = temp + 5;   // Valid: type inferred as int from expression (first usage)
 }
 
-// Valid: one unknown auto + int literal — inference can fix the auto (contrast with `x + y` error above)
+// Valid: one unknown auto + integer literal — deterministic tie-break (see spec Rule 2.2.1)
 void valid4() {
     auto value;
-    auto result = value + 5;  // Valid: value inferred as int (other operand is IntLiteral 5)
+    auto result = value + 5;  // Valid: value fixed as int (not the only typing compatible with `+`,
+                              // but TyC pins an unknown numeric `auto` to int when the other operand is an integer literal)
 }
 
 // Valid: auto with initialization from expression (operands already typed)
@@ -384,7 +386,7 @@ void valid5() {
     auto sum = a + b;  // Valid: type inferred as float from expression
 }
 
-// Valid: auto variable inferred from function parameter type (built-in printInt)
+// Valid: whole argument is one `auto` identifier — parameter type fixes `x` (contrast `f(x + y)` with two unknowns)
 void valid6() {
     auto x;
     printInt(x);  // Valid: type inferred as int from printInt(int) parameter type

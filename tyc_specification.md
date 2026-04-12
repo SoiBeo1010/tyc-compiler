@@ -453,7 +453,7 @@ f = 3.14;              // f is already float
 
 **Important Rules:**
 - When using `auto` with initialization, the type is inferred from the initialization expression
-- When using `auto` without initialization, the type is inferred from the first usage of the variable (assignment, expression, function argument, return value, etc.)
+- When using `auto` without initialization, the type is inferred from the **first usage**, subject to the inference contexts in **Rule 2.2** and **Rule 2.2.1** under *Type Inference* (outer types on receivers or parameters do not automatically fix every `auto` inside a nested expression)
 - When using explicit type, initialization is optional
 - If a variable is used in a context where its type cannot be determined, a semantic error occurs
 
@@ -589,7 +589,7 @@ Where `<type>` is one of: `int`, `float`, `string`, or a struct type name
 
 **Type Inference Rules:**
 - When using `auto` with initialization: the type is inferred from the initialization expression
-- When using `auto` without initialization: the type is inferred from the first usage of the variable (assignment, expression, function argument, etc.)
+- When using `auto` without initialization: the type is inferred from the first usage, as detailed in **Rule 2.2** and **Rule 2.2.1** under *Type Inference*
 - When using explicit type with initialization: the type of the initialization expression must match the declared type
 - When using explicit type without initialization: the variable has the explicitly declared type
 
@@ -832,12 +832,20 @@ auto z = x + y;        // z: float (from expression result type)
 
 **2.2 Variable Declaration with `auto` without Initialization:**
 - The type is inferred from the first usage of the variable
-- The variable's type is determined by the context of its first usage:
-  - If first usage is an assignment: type is the type of the right-hand side expression
-  - If first usage is in an expression: type is determined by the expression's type requirements
-  - If first usage is as a function argument: type is determined by the function parameter type
-  - If first usage is as a return value: type is determined by the function return type
-- If the variable is used in a context where its type cannot be determined, a semantic error occurs
+- The variable's type is determined by the **inference context** of that first usage (see **2.2.1**). In short:
+  - If first usage is an **assignment** to an already-typed left-hand side: the type is the type of the right-hand side (the RHS must be checkable under TyC’s rules, including cases where another operand—such as an integer literal—fixes a single unknown `auto`).
+  - If first usage is as a **function argument**: the parameter type is the expected type of the **whole** argument expression. A lone `auto` **identifier** as the argument may be fixed to that parameter type; TyC does **not** use the parameter type to assign types separately to each operand inside a larger argument expression (e.g. two unknown `auto`s in `x + y` passed to `f(...)`).
+  - If first usage is a **return** value: the function’s return type is the expected type of the **whole** returned expression; the same limitation applies to unknown operands inside nested sub-expressions.
+  - If first usage appears only inside expressions where no rule above fixes that `auto`, a semantic error occurs (`TypeCannotBeInferred`; see *TyC Programming Language - Semantic Constraints and Error Types*).
+
+**2.2.1 Inference contexts (what fixes `auto`, what does not)**
+
+TyC uses **local** inference rules, not unconstrained “propagate any outer type into every sub-expression”:
+
+- **Assignment:** `lhs = rhs` — if `lhs` already has a definite type, `rhs` is checked for compatibility with that type. That can fix one `auto` on the RHS when the rest of the expression supplies enough information (e.g. literals, already-typed variables, or a single unknown with a literal anchor as in Rule 2.2 examples).
+- **Explicitly typed initializer:** `T v = expr` — `expr` must have type `T`. The declared type `T` applies to **checking** the full initializer; it does **not** by itself assign types to unrelated `auto` variables that appear only as **operands** inside `expr` (e.g. two unknown `auto`s in `a * b` when neither is fixed elsewhere).
+- **Function call:** Parameter types apply as the expected type of each **argument expression as a whole**. They fix an `auto` **identifier** that is the entire argument (e.g. `printInt(x)`), but they do **not** recursively infer every leaf in a compound argument.
+- **Integer literal anchor:** For arithmetic `+`, `-`, `*`, `/`, if one operand is an undetermined `auto` and the other is an **integer literal**, TyC applies a **deterministic** rule: the unknown operand is taken as `int`. This is not because `int` is the only typing compatible with the operator table (e.g. if that variable were already known to be `float`, `float + int` would still be valid); it is a **tie-break** for an otherwise unconstrained `auto`.
 
 ```tyc
 auto a;                // type unknown initially
